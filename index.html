@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTD Hydrogen Bus Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        #map {
+            height: 300px;
+            width: 80%; 
+            margin: 0 auto; 
+            margin-bottom: 20px;
+        }
+        #bus-list {
+            width: 80%;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        #bus-list h2 {
+            text-align: center;
+            font-family: "Arial", sans-serif;
+            margin-top: 0;
+        }
+        #bus-list ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .bus-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: "Arial", sans-serif;
+            margin-bottom: 10px;
+        }
+        .bus-item strong {
+            font-family: "Arial", sans-serif;
+        }
+
+        /* Media query for smaller screens */
+        @media screen and (max-width: 768px) {
+            #map {
+                width: 90%; /* Adjusted width for mobile */
+            }
+            #bus-list {
+                width: 90%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; font-family: Arial;">Glee Bus Tracker</h1>
+    <p style="text-align: center; font-family: Arial"> Data provided by CUMTD</p>
+
+    <div id="map"></div>
+    <div id="bus-list">
+        <h2>Active Buses</h2>
+        <ul id="buses"></ul>
+    </div>
+
+    <script>
+        const apiKey = '712ab1c8fe1d41e4af431190c4d344a3';
+        const busNumbers = ['2366'];
+        const icons = {
+            '2366': 'https://www.google.com/url?sa=i&url=https%3A%2F%2Fmusic.illinois.edu%2Fpeople%2Fprofiles%2Fbarrington-l-coleman%2F&psig=AOvVaw2fY9wZtTuH62BYOY3nxEDj&ust=1727795005096000&source=images&cd=vfe&opi=89978449&ved=0CBQQjRxqFwoTCOiQ1Z_46ogDFQAAAAAdAAAAABAE'
+}
+        let map;
+        let busList = document.getElementById('buses');
+
+        function initMap() {
+            map = L.map('map').setView([40.1106, -88.2073], 14); // Center the map on Champaign-Urbana
+
+            // Add OpenStreetMap tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Fetch bus locations and add markers
+            fetchBusLocations();
+
+        }
+
+        function fetchBusLocations() {
+
+            busNumbers.forEach(busNumber => {
+                const apiUrl = `https://developer.mtd.org/api/v2.2/json/GetVehicle?vehicle_id=${busNumber}&key=${apiKey}`;
+                fetch(apiUrl)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status.code === 200 && data.vehicles.length > 0) {
+                            const vehicle = data.vehicles[0];
+                            const location = vehicle.location;
+                            const headsign = vehicle.trip.trip_headsign;
+                            const route = vehicle.trip.route_id;
+                            const direction = vehicle.trip.direction;
+                            const livery = getLivery(busNumber);
+
+                            // Fetch closest intersection
+                            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${location.lat}&lon=${location.lon}`)
+                                .then(response => response.json())
+                                .then(result => {
+                                    const closestIntersection = result.address.road || "Unknown";
+                                    const busLatLng = [location.lat, location.lon];
+                                    const busIcon = L.icon({
+                                        iconUrl: icons[busNumber],
+                                        iconSize: [50, 50],
+                                    });
+
+                                    const busMarker = L.marker(busLatLng, { icon: busIcon }).addTo(map);
+                                    let infoWindowContent;
+
+                                    if (route == null && (closestIntersection == "East University Avenue" || closestIntersection == "North Lynn Street" || closestIntersection == "North Webber Street")) {
+                                        infoWindowContent = ` <strong>Bus Number:</strong> ${busNumber}<br/> <strong>Livery:</strong> ${livery} <br /><strong>Not In Service - At Garage</strong>`;
+                                    }
+									else if (route == null && closestIntersection != "East University Avenue"){
+										infoWindowContent = ` <strong>Bus Number:</strong> ${busNumber}<br/> <strong>Livery:</strong> ${livery} <br /><strong>Not In Service - on ${closestIntersection} </strong>`;
+									}
+									else {
+                                        infoWindowContent = `<strong>Bus Number:</strong> ${busNumber}<br/><strong>Livery:</strong> ${livery} <br/><strong>Route:</strong> ${route} ${direction} to ${headsign} <br/> <strong>Street:</strong> ${closestIntersection}`;
+                                    }
+
+                                    busMarker.bindPopup(infoWindowContent);
+
+                                    // Add bus information to the list
+                                    const listItem = document.createElement('li');
+                                    listItem.classList.add('bus-item');
+                                    listItem.innerHTML = infoWindowContent;
+                                    busList.appendChild(listItem);
+                                })
+                                .catch(error => {
+                                    console.error(`Error fetching closest intersection for bus ${busNumber}:`, error);
+                                });
+                        } else {
+                            console.log(`Bus ${busNumber} not found or API error.`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(`Error fetching bus ${busNumber} location:`, error);
+                    });
+            });
+        }
+
+        function getLivery(busNumber) {
+            // This function should return the livery based on the bus number
+            // You can implement your logic to determine the livery
+			if(busNumber == 2366){
+			return "GLEE BUS"
+			}
+            
+        }
+
+        // Call initMap() when the page is loaded
+        window.onload = initMap;
+    </script>
+</body>
+</html>
